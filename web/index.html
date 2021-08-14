@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Nomad list</title>
+
+    <script src="https://cdn.jsdelivr.net/npm/vue@2/dist/vue.js"></script>
+    
+    <link rel="stylesheet" href="//cdn.jsdelivr.net/chartist.js/latest/chartist.min.css">
+    <script src="//cdn.jsdelivr.net/chartist.js/latest/chartist.min.js"></script>
+
+    <style>
+        body {
+            margin: 0px;
+            padding: 0px;
+            background-color: #335;
+            font-family: Verdana, Geneva, Tahoma, sans-serif;
+        }
+
+        .container {
+            background-color: #335;
+            padding: 5px;
+            display: flex;
+            width: 98%;
+            height: 100%;
+        }
+
+        .jobs {
+            display: block;
+            margin: 10px;
+            padding: 5px;
+            width: 30%;
+            float: left;
+            background-color: #335;
+        }
+
+        .cluster {
+            display: block;
+            margin: 10px;
+            width: 70%;
+            height: 90vh;
+            background-color: #FFF;
+            padding: 20px;
+        }
+
+        .jobs .item {
+            display: block;
+            padding: 5px 15px;
+            margin: 5px;
+            background-color: #557;
+            border-radius: 5px;
+        }
+
+        .jobs .item:hover {
+            background-color: #88a;
+        }
+
+        .jobs input[type=text] {
+            width: 90%;
+            font-size: 18px;
+            padding: 5px;
+            margin: 10px;
+            border: none;
+        }
+
+        .right {
+            float: right;
+        }
+
+        #overlay {
+            position: fixed;
+            top: 0px;
+            left: 0px;
+            background-color: rgb(0, 0, 0, 0.3);
+            width: 100vw;
+            height: 100vh;
+            z-index: 1;
+        }
+
+        #jobDetail {
+            display: block;
+            width: 90%;
+            height: 600px;
+            background-color: rgb(0, 0, 0, 0.7);
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 2;
+            border-color: grey;
+            border-width: 10px;
+            border-radius: 5px;
+            box-shadow: 5px 10px 10px rgb(10,10,10,0.5);
+        }
+
+        #jobDetail .title {
+            color: white;
+            text-align: center;
+            font-weight: bold;
+            font-size: 18px;
+        }
+
+        .close-btn {
+            display: block;
+            position: absolute;
+            top: 0px;
+            right: 0px;
+            border-radius: 50%;
+            color: white;
+            font-size: 30px;
+            font-weight: bold;
+            font-family: Verdana, Geneva, Tahoma, sans-serif;
+            width: 25px;
+            height: 25px;
+            margin: 5px;
+        }
+
+        #jobDetail .content {
+            padding: 10px;
+            margin: 10px;
+            background-color: white;
+            height: 500px;
+            overflow: scroll;
+        }
+
+    </style>
+
+</head>
+
+<body>
+
+<div id="nomad">
+
+    <div class="container">
+        <div id="overlay" v-show="showDetail">
+            <div id="jobDetail">
+                <div class="title">
+
+                    <h3>{{ jobDetail.ID }}</h3>
+                    <span class="close-btn" @click="closeDetail">&times;</span>
+
+                </div>
+                <div class="content">
+                    <pre>
+        {{ jobDetail.TaskGroups }}
+                    </pre>
+                </div>
+
+            </div>
+        </div>
+    
+        <div class="jobs">
+            <input type="text" v-model="filter" class="filter"></input>
+
+            <div v-for="job in filteredJobs" 
+                class="item"
+                @click="getJobDetail(job.ID, job.Namespace)"
+                >
+                <i class="fas fa-cog fa-spin"></i>
+                <b>{{job.ID}}</b> ({{ job.Status }})
+                <button class="right" @click="stop(job.ID)">STOP</button>
+            </div>
+
+            <div class=stats>
+                <div class="ct-chart cpu-stats">CPU</div>
+                <div class="ram-stats">RAM</div>
+            </div>
+
+        </div>
+
+        <div class="cluster">
+            Statistika
+
+            <div class="nodes">
+                <div v-for="node in nodes" class="node-list">
+                    <p><b>{{node.Name}}</b> ({{ node.Status }})</p>
+                    <pre>
+        Address: {{ node.Address }}
+        Version: {{ node.Version}}
+                    </pre>
+                </div>
+            </div>
+        </div>
+
+    </div>
+    
+</div>
+
+
+
+<script>
+
+// Fetching params for get requests
+let getFetchParams = {
+    mode: 'cors',
+    method: 'GET',
+    redirect: 'follow',
+    cache: 'no-cache',
+    referrerPolicy: 'no-referrer',
+    headers: {
+        'Content-Type': 'application/json',
+        'X-Nomad-Token': '' 
+    }
+}
+
+
+new Chartist.Pie('.cpu-stats', {
+  series: [20, 10, 30, 40]
+}, {
+  donut: true,
+  donutWidth: 60,
+  startAngle: 270,
+  total: 200,
+  showLabel: false
+});
+
+new Chartist.Pie('.ram-stats', {
+  series: [20, 10, 30, 40]
+}, {
+  donut: true,
+  donutWidth: 60,
+  startAngle: 270,
+  total: 200,
+  showLabel: false
+});
+
+
+// Vue app
+var noList = new Vue({
+    el: '#nomad',
+
+    data: {
+        endpoint: "localhost",
+        showDetail: false,
+        jobDetail: "",
+        filter: "",
+        jobs: [],
+        nodes: []
+    },
+
+    mounted() {
+        fetch("/v1/nodes", getFetchParams)
+            .then(response => response.json())
+            .then(data => {
+                //console.log(data);
+                this.nodes = data;
+            });
+
+        fetch("/v1/jobs?namespace=*", getFetchParams)
+            .then(response => response.json())
+            .then(data => {
+                console.log(data);
+                this.jobs = data;
+            });
+  
+    },
+
+    methods: {
+        getJobDetail(jobID, namespace = "default") {
+            console.log(jobID, namespace);
+
+            fetch("/v1/job/" + jobID + "?namespace=" + namespace, getFetchParams)
+                .then(response => response.json())
+                .then(data => {
+                    console.log(data);
+                    this.jobDetail = data;
+                    this.showDetail = true;
+                });
+        },
+
+        closeDetail() {
+            this.showDetail = false;
+        },
+
+        jobStop(jobID) {
+            console.log("Stoping job " + jobID)
+        }
+
+
+    },
+
+    computed: {
+        filteredJobs() {
+            return this.jobs.filter(j => {
+                return j.ID.toLowerCase().includes(this.filter.toLowerCase())
+            })
+        }
+
+        
+    }
+});
+
+</script>
+</body>
+</html>
