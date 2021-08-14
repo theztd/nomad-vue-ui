@@ -13,4 +13,7 @@ docker run -it --rm -p 8080:80 \
 
 ```
 
+The application will be available at the address **http://localhost:8080/web/index.html**.
+
+
 This docker staff is required because CORS...
