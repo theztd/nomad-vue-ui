@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Nomad list</title>
+
+    <script src="./static/vue.js"></script>
+    <link href="./static/base.css" rel="stylesheet" />
+    
+    <link href="./static/material-icons.css" rel="stylesheet">
+
+
+    <script src="http://codemirror.net/lib/codemirror.js"></script>
+    <link rel="stylesheet" href="http://codemirror.net/lib/codemirror.css">
+
+<!--
+
+    Pokusy s prism a textarea
+
+    <link href="./static/prism.css" rel="stylesheet" />
+    <script src="./static/prism.js"></script>
+    
+    <link href="./static/prism-live.css" rel="stylesheet" />
+    <script src="./static/prism-live.js"></script> 
+    
+-->
+
+    <link rel="stylesheet" href="./static/chartist.min.css">
+    <script src="./static/chartist.min.js"></script>
+
+
+</head>
+
+<body>
+
+<div id="nomad">
+
+    <div class="container">
+
+
+        <!-- Modal window for jobDetail -->
+
+        <div id="overlay" v-show="showDetail">
+            <div id="jobDetail">
+                <div class="title">
+
+                    <h3>{{ jobDetail.ID }}</h3>
+                    <span class="close-btn" @click="closeDetail">&times;</span>
+
+                </div>
+
+                <div class="content">
+                    
+                    <textarea id="code-editor" class="editor">
+{{ jobDetail.TaskGroups }}
+                    </textarea>
+
+                </div>
+                
+                <hr noshade>
+                <div class="right">
+                <span title="Copy job definition to clipboard" 
+                    class="material-icons" 
+                    v-clipboard:copy="jobDetail.TaskGroups"
+                    @click="copyToClipboard(jobDetail.ID)"
+                >content_copy</span>
+                <button class="blue" @click="jobDiff(jobDetail.ID)">Plan</button>
+                <button class="green" @click="jobDeploy(jobDetail.ID)">Deploy</button>
+                </div>>
+            </div>
+        </div>
+
+
+
+        <!-- Main view definition -->
+    
+        <div class="jobs">
+            <input type="text" v-model="filter" class="filter"></input>
+
+            <div v-for="job in filteredJobs" 
+                class="item"
+                >
+                <template v-if="job.Status == 'running'">
+                    <span 
+                        class="label" 
+                        @click="getJobDetail(job.ID, job.Namespace)">
+                        <span class="material-icons">done</span>
+                        <b>{{job.ID}}</b>
+                    </span>
+                    <span class="material-icons right" @click="jobStop(job.ID)">stop_circle</span>
+                    <span class="material-icons right" @click="jobRestart(job.ID)">restart_alt</span>
+                </template>
+        
+                <template v-else>
+                    <span 
+                        class="label" 
+                        @click="getJobDetail(job.ID, job.Namespace)">
+                        <span title="Current status is {{job.Status}}" class="material-icons">warning</span>
+                        <b>{{job.ID}}</b>
+                    </span>
+                    <span class="material-icons right" @click="jobStart(job.ID)">play_arrow</span>
+                </template>
+                
+            </div>
+
+            <div class=stats>
+                <div class="ct-chart cpu-stats">CPU</div>
+                <div class="ram-stats">RAM</div>
+            </div>
+
+
+        </div>
+
+        <div class="cluster">
+            Statistika
+
+            <div class="nodes">
+                <div v-for="node in nodes" class="node-list">
+                    <p><b>{{node.Name}}</b> ({{ node.Status }})</p>
+                    <pre>
+        Address: {{ node.Address }}
+        Version: {{ node.Version}}
+                    </pre>
+                </div>
+            </div>
+        </div>
+
+    </div>
+    
+</div>
+
+
+
+<script>
+
+// Fetching params for get requests
+let getFetchParams = {
+    mode: 'cors',
+    method: 'GET',
+    redirect: 'follow',
+    cache: 'no-cache',
+    referrerPolicy: 'no-referrer',
+    headers: {
+        'Content-Type': 'application/json',
+        'X-Nomad-Token': "" 
+    }
+}
+
+
+new Chartist.Pie('.cpu-stats', {
+  series: [20, 10, 30, 40]
+}, {
+  donut: true,
+  donutWidth: 60,
+  startAngle: 270,
+  total: 200,
+  showLabel: false
+});
+
+new Chartist.Pie('.ram-stats', {
+  series: [20, 10, 30, 40]
+}, {
+  donut: true,
+  donutWidth: 60,
+  startAngle: 270,
+  total: 200,
+  showLabel: false
+});
+
+
+// Vue app
+var nomList = new Vue({
+    el: '#nomad',
+
+    data: {
+        endpoint: "localhost",
+        showDetail: false,
+        jobDetail: "",
+        filter: "",
+        jobs: [],
+        nodes: []
+    },
+
+    mounted() {
+        fetch("/v1/nodes", getFetchParams)
+            .then(response => response.json())
+            .then(data => {
+                //console.log(data);
+                this.nodes = data;
+            });
+
+        fetch("/v1/jobs?namespace=*", getFetchParams)
+            .then(response => response.json())
+            .then(data => {
+                console.log(data);
+                this.jobs = data;
+            });
+  
+    },
+
+    methods: {
+        getJobDetail(jobID, namespace = "default") {
+            console.log(jobID, namespace);
+
+            fetch("/v1/job/" + jobID + "?namespace=" + namespace, getFetchParams)
+                .then(response => response.json())
+                .then(data => {
+                    console.log(data);
+                    this.jobDetail = data;
+                    this.showDetail = true;
+
+                    var editor = CodeMirror.fromTextArea(document.getElementById("DISABLED____code-editor"), {
+                        lineNumbers: true
+                    });
+
+                });
+        },
+
+        closeDetail() {
+            this.showDetail = false;
+        },
+
+        copyToClipboard(jobID) {
+            console.log(this.jobDetail.TaskGroups);
+        },
+
+        jobStop(jobID) {
+            console.log("Stoping job " + jobID)
+        },
+
+        jobStart(jobID) {
+            console.log("Starting stopped job " + jobID)
+        },
+
+        jobRestart(jobID) {
+            this.jobStop(jobID);
+            this.jobStart(jobID);
+        },
+
+        jobDiff(jobID) {
+            console.log("Show differences betwean original and new job definition.")
+        },
+
+        jobDeploy(jobID) {
+            console.log("Deploy defined job " + jobID)
+        }
+
+
+
+
+    },
+
+    computed: {
+        filteredJobs() {
+            return this.jobs.filter(j => {
+                return j.ID.toLowerCase().includes(this.filter.toLowerCase())
+            })
+        },
+
+        deployTemplates() {
+            
+        }
+        
+    }
+});
+
+</script>
+</body>
+</html>

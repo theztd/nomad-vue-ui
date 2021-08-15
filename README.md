@@ -1,7 +1,7 @@
 # Simple nomad dashboard
 ---
 
-Nomad sily proof of concept dashboard implemented in Vuejs.
+Very basic dashboard for the Nomad implemented in Vuejs. It is only silly proof of concept made to learn something new and to have fun...
 
 
 ```bash
@@ -13,7 +13,7 @@ docker run -it --rm -p 8080:80 \
 
 ```
 
-The application will be available at the address **http://localhost:8080/web/index.html**.
+The application will be available at the address **http://localhost:8080/vue/index.html**.
 
 
 This docker staff is required because CORS...
